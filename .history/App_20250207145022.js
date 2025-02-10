@@ -1,0 +1,133 @@
+import React, { useState, useEffect } from "react";
+import { NavigationContainer } from "@react-navigation/native";
+import { createStackNavigator } from "@react-navigation/stack";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Audio } from "expo-av";
+
+import { auth } from "./screens/Firebase";
+
+// Import your screens
+import LoginScreen from "./screens/LoginScreen";
+import RegisterScreen from "./screens/RegisterScreen";
+import ProfileScreen from "./screens/ProfileScreen";
+import Recorder from "./screens/Recorder";
+import VoiceNoteList from "./screens/VoiceNoteList";
+
+// Create the navigation stack
+const Stack = createStackNavigator();
+
+const App = () => {
+  const [user, setUser] = useState(null); // State to store user info
+  const [voiceNotes, setVoiceNotes] = useState([]);
+  const [searchText, setSearchText] = useState("");
+  const [recordingQuality, setRecordingQuality] = useState("HIGH");
+
+  // Load notes from AsyncStorage
+  const loadNotes = async () => {
+    try {
+      const jsonValue = await AsyncStorage.getItem("@voice_notes");
+      if (jsonValue) {
+        const allNotes = JSON.parse(jsonValue);
+
+        const userNotes = allNotes.filter((note) => note.email === user?.email);
+        setVoiceNotes(userNotes);
+      }
+    } catch (e) {
+      console.error("Error loading notes:", e);
+    }
+  };
+
+  const saveNotes = async (notes) => {
+    try {
+      const jsonValue = JSON.stringify(notes);
+      await AsyncStorage.setItem("@voice_notes", jsonValue);
+    } catch (e) {
+      console.error("Error saving notes:", e);
+    }
+  };
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(setUser);
+    loadNotes();
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      loadNotes();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    saveNotes(voiceNotes);
+  }, [voiceNotes]);
+
+  const addVoiceNote = (uri) => {
+    const newNote = {
+      id: voiceNotes.length + 1,
+      name: `Audio ${voiceNotes.length + 1}`,
+      date: new Date().toLocaleString(),
+      uri,
+      email: user.email,
+    };
+    setVoiceNotes((prev) => [...prev, newNote]);
+  };
+
+  const deleteVoiceNote = (id) => {
+    setVoiceNotes((prev) => prev.filter((note) => note.id !== id));
+  };
+
+  const playVoiceNote = async (uri) => {
+    const sound = new Audio.Sound();
+    await sound.loadAsync({ uri });
+    await sound.playAsync();
+  };
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName={user ? "Profile" : "Register"}>
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Register" component={RegisterScreen} />
+        <Stack.Screen name="Profile">
+          {() => (
+            <ProfileScreen
+              user={user}
+              voiceNotes={voiceNotes}
+              onDelete={deleteVoiceNote}
+              onPlay={playVoiceNote}
+              onQualityChange={setRecordingQuality}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="Recorder">
+          {() => (
+            <Recorder
+              onRecordingComplete={addVoiceNote}
+              recordingQuality={recordingQuality}
+              voiceNotes={voiceNotes}
+              onDelete={deleteVoiceNote}
+              onPlay={playVoiceNote}
+              userEmail={user?.email}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="VoiceNoteList">
+          {() => (
+            <VoiceNoteList
+              voiceNotes={voiceNotes}
+              onDelete={deleteVoiceNote}
+              onPlay={playVoiceNote}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="Settings">
+          {() => <Settings onQualityChange={setRecordingQuality} />}
+        </Stack.Screen>
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+};
+
+export default App;
