@@ -34,4 +34,4 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
-screens/Firebase.js
+Firebase.js
